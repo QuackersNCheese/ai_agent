@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types, errors
 import argparse
+from prompts import system_prompt
 
 # load environment variables, grab api key and load into Gemini client object
 load_dotenv()   
@@ -36,7 +37,8 @@ def main():
     try:
         response = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=messages
+            contents=messages,
+            config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0),
             )   
         if response.usage_metadata == None:
             raise RuntimeError("failed genai response")
