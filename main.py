@@ -4,6 +4,7 @@ from google import genai
 from google.genai import types, errors
 import argparse
 from prompts import system_prompt
+from functions.call_function import available_functions
 
 # load environment variables, grab api key and load into Gemini client object
 load_dotenv()   
@@ -38,8 +39,16 @@ def main():
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=messages,
-            config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0),
+            config=types.GenerateContentConfig(
+                tools =[available_functions], 
+                system_instruction=system_prompt
+                ),
             )   
+        if response.function_calls:
+            for call in response.function_calls:
+                print(f"Calling function: {call.name}({call.args})")
+        else:
+            print(response.text)
         if response.usage_metadata == None:
             raise RuntimeError("failed genai response")
     except genai.errors.ServerError as e:
