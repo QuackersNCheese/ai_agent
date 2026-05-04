@@ -4,7 +4,7 @@ from google import genai
 from google.genai import types, errors
 import argparse
 from prompts import system_prompt
-from functions.call_function import available_functions
+from functions.call_function import available_functions, call_function
 
 # load environment variables, grab api key and load into Gemini client object
 load_dotenv()   
@@ -35,32 +35,42 @@ def main():
     messages = [types.Content(role="user", parts=[types.Part(text=args.user_prompt)])]
 
     # Prompt the model
-    try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=messages,
-            config=types.GenerateContentConfig(
-                tools =[available_functions], 
-                system_instruction=system_prompt
-                ),
-            )   
-        if response.function_calls:
-            for call in response.function_calls:
-                print(f"Calling function: {call.name}({call.args})")
-        else:
-            print(response.text)
-        if response.usage_metadata == None:
-            raise RuntimeError("failed genai response")
-    except genai.errors.ServerError as e:
-        print("Gemini Service is unavailable due to high demand", e)
-    
-    # display metadata
-    if args.verbose:
-        print("User prompt:", args.user_prompt)
-        print("Prompt tokens:", response.usage_metadata.prompt_token_count)
-        print("Response tokens:", response.usage_metadata.candidates_token_count)
-    print(response.text)
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=messages,
+        config=types.GenerateContentConfig(
+            tools =[available_functions], 
+            system_instruction=system_prompt
+            ),
+        )   
+    if response.function_calls:
+        function_responses = [] # This will hold our results to send back to the AI later
 
+    for call in response.function_calls:
+        # Execute the function
+        function_call_result = call_function(call, verbose=args.verbose)
+    
+        # Validation checks as requested in the assignment
+        if not function_call_result.parts:
+            raise Exception("Function call returned no parts")
+    
+        part = function_call_result.parts[0]
+        print(f"-> {part.function_response.response}")
+        if part.function_response is None:
+            raise Exception("Part does not contain a function_response")
+            
+        if part.function_response.response is None:
+            raise Exception("FunctionResponse does not contain a response field")
+
+        # Save the part for the next step of the conversation
+        function_responses.append(part)
+        
+        # display metadata
+        if args.verbose:
+            print("User prompt:", args.user_prompt)
+            print("Prompt tokens:", response.usage_metadata.prompt_token_count)
+            print("Response tokens:", response.usage_metadata.candidates_token_count)
+            print(response.text)
 
 
 if __name__ == "__main__":
