@@ -30,47 +30,78 @@ Objective: Build an AI Agent that is a coding assistant CLI tool- 'A toy version
 3) Repeats step 2 until the task is complete (or it fails miserably, which is possible)
 """
 def main():
-    print("Hello from ai-agent!")
+    user_prompt = "how does the calculator render results to the console?"
     # grant the agent memory with a message history
     messages = [types.Content(role="user", parts=[types.Part(text=args.user_prompt)])]
 
+    for i in range(20):
     # Prompt the model
-    response = client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=messages,
-        config=types.GenerateContentConfig(
-            tools =[available_functions], 
-            system_instruction=system_prompt
-            ),
-        )   
-    if response.function_calls:
-        function_responses = [] # This will hold our results to send back to the AI later
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=messages,
+            config=types.GenerateContentConfig(
+                tools =[available_functions], 
+                system_instruction=system_prompt
+                ),
+            )   
+        if response.candidates:
+            for candidate in response.candidates:
+                messages.append(candidate.content)
 
-    for call in response.function_calls:
-        # Execute the function
-        function_call_result = call_function(call, verbose=args.verbose)
-    
-        # Validation checks as requested in the assignment
-        if not function_call_result.parts:
-            raise Exception("Function call returned no parts")
-    
-        part = function_call_result.parts[0]
-        print(f"-> {part.function_response.response}")
-        if part.function_response is None:
-            raise Exception("Part does not contain a function_response")
+        # 3. Check if the Model wants to use tools
+        if response.function_calls:
+            function_responses = []
+            for call in response.function_calls:
+                # Execute the tool
+                function_call_result = call_function(call, verbose=True)
+                
+                # Extract the Part from the result and add to our temporary list
+                part = function_call_result.parts[0]
+                function_responses.append(part)
+                
+                print(f"-> {part.function_response.response}")
+
+            # 4. Give the results back to the model as a "user" role
+            messages.append(types.Content(role="user", parts=function_responses))
             
-        if part.function_response.response is None:
-            raise Exception("FunctionResponse does not contain a response field")
-
-        # Save the part for the next step of the conversation
-        function_responses.append(part)
-        
-        # display metadata
-        if args.verbose:
-            print("User prompt:", args.user_prompt)
-            print("Prompt tokens:", response.usage_metadata.prompt_token_count)
-            print("Response tokens:", response.usage_metadata.candidates_token_count)
+        else:
+            # 5. No function calls? This is the FINAL response.
+            print("\nFinal response:")
             print(response.text)
+            return  # Exit the loop and the program successfully
+
+    # If we hit 20 iterations without a final text response
+    print("Error: Maximum iterations reached without a final answer.")
+    exit(1)
+    
+    # if response.function_calls:
+    #     function_responses = [] # This will hold our results to send back to the AI later
+
+    # for call in response.function_calls:
+    #     # Execute the function
+    #     function_call_result = call_function(call, verbose=args.verbose)
+    
+    #     # Validation checks as requested in the assignment
+    #     if not function_call_result.parts:
+    #         raise Exception("Function call returned no parts")
+    
+    #     part = function_call_result.parts[0]
+    #     print(f"-> {part.function_response.response}")
+    #     if part.function_response is None:
+    #         raise Exception("Part does not contain a function_response")
+            
+    #     if part.function_response.response is None:
+    #         raise Exception("FunctionResponse does not contain a response field")
+
+    #     # Save the part for the next step of the conversation
+    #     function_responses.append(part)
+        
+    #     # display metadata
+    #     if args.verbose:
+    #         print("User prompt:", args.user_prompt)
+    #         print("Prompt tokens:", response.usage_metadata.prompt_token_count)
+    #         print("Response tokens:", response.usage_metadata.candidates_token_count)
+    #         print(response.text)
 
 
 if __name__ == "__main__":
